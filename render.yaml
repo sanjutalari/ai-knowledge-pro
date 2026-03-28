@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ai-knowledge-pro
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: OPENROUTER_API_KEY
+        sync: false          # set manually in Render dashboard
+      - key: PORT
+        value: 10000
+    plan: free
