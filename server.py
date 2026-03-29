@@ -82,27 +82,36 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             model = FALLBACK_MODEL
         payload['model'] = model
 
+        # Extract real client IP if proxied
+        client_ip = self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
+
         # Build fallback chain: requested model first, then all others
         tried = {model}
         chain = [model] + [m for m in FREE_MODELS if m not in tried]
-        self._call_with_fallback(payload, chain, 0)
+        self._call_with_fallback(payload, chain, 0, client_ip=client_ip)
 
-    def _call_with_fallback(self, payload, chain, idx):
+    def _call_with_fallback(self, payload, chain, idx, last_err=None, client_ip=None):
         if idx >= len(chain):
-            self._json_error(429, 'All free models are rate-limited. Please try again in a minute.')
+            msg = f'All free models failed. Last error: {last_err}' if last_err else 'All free models are rate-limited. Please try again in a minute.'
+            self._json_error(429, msg)
             return
 
         payload['model'] = chain[idx]
         data = json.dumps(payload).encode()
+        
+        headers = {
+            'Authorization': f'Bearer {OPENROUTER_KEY}',
+            'Content-Type':  'application/json',
+            'HTTP-Referer':  'https://studyai-pro.onrender.com',
+            'X-Title':       'StudyAI Pro',
+        }
+        if client_ip:
+            headers['X-Forwarded-For'] = client_ip
+
         req  = urllib.request.Request(
             'https://openrouter.ai/api/v1/chat/completions',
             data=data,
-            headers={
-                'Authorization': f'Bearer {OPENROUTER_KEY}',
-                'Content-Type':  'application/json',
-                'HTTP-Referer':  'https://studyai-pro.onrender.com',
-                'X-Title':       'StudyAI Pro',
-            },
+            headers=headers,
             method='POST'
         )
         try:
@@ -110,10 +119,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(200, resp.read())
         except urllib.error.HTTPError as e:
             err = e.read().decode('utf-8', errors='replace')
-            # On rate-limit (429) or model not found (404), try next model
-            if e.code in (429, 404) or 'No endpoints' in err or 'rate' in err.lower():
+            # On rate-limit (429) or model not found/offline (404, 502, 503), try next model
+            if e.code in (429, 404, 502, 503) or 'No endpoints' in err or 'rate' in err.lower() or 'timeout' in err.lower():
                 print(f'[fallback] {chain[idx]} → {e.code}, trying next…')
-                self._call_with_fallback(payload, chain, idx + 1)
+                
+                # Extract clean error message if possible
+                clean_err = err
+                try:
+                    clean_err = json.loads(err).get('error', {}).get('message', err)
+                except: pass
+                
+                self._call_with_fallback(payload, chain, idx + 1, clean_err, client_ip)
             else:
                 self._json_error(e.code, err[:500])
         except urllib.error.URLError as e:
