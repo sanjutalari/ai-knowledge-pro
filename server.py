@@ -9,8 +9,17 @@ PORT = int(os.environ.get('PORT', 8000))
 OPENROUTER_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-# Verified working free models on OpenRouter
-FALLBACK_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
+# Fallback chain — if one model is rate-limited (429) or unavailable, try the next
+FREE_MODELS = [
+    'meta-llama/llama-3.3-70b-instruct:free',
+    'google/gemma-3-27b-it:free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'qwen/qwen3-coder:free',
+    'nvidia/nemotron-nano-9b-v2:free',
+    'nousresearch/hermes-3-llama-3.1-405b:free',
+    'google/gemma-3-12b-it:free',
+]
+FALLBACK_MODEL = FREE_MODELS[0]
 
 class Handler(http.server.SimpleHTTPRequestHandler):
 
@@ -43,7 +52,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             'status':      'ok',
             'key_set':     bool(OPENROUTER_KEY),
             'key_preview': (OPENROUTER_KEY[:14] + '...') if OPENROUTER_KEY else 'NOT SET',
-            'fallback_model': FALLBACK_MODEL,
+            'fallback_models': FREE_MODELS,
         }).encode()
         self._send_json(200, body)
 
@@ -70,9 +79,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             model = FALLBACK_MODEL
         payload['model'] = model
 
-        self._call_openrouter(payload, retry=True)
+        # Build fallback chain: requested model first, then all others
+        tried = {model}
+        chain = [model] + [m for m in FREE_MODELS if m not in tried]
+        self._call_with_fallback(payload, chain, 0)
 
-    def _call_openrouter(self, payload, retry=True):
+    def _call_with_fallback(self, payload, chain, idx):
+        if idx >= len(chain):
+            self._json_error(429, 'All free models are rate-limited. Please try again in a minute.')
+            return
+
+        payload['model'] = chain[idx]
         data = json.dumps(payload).encode()
         req  = urllib.request.Request(
             'https://openrouter.ai/api/v1/chat/completions',
@@ -90,10 +107,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._send_json(200, resp.read())
         except urllib.error.HTTPError as e:
             err = e.read().decode('utf-8', errors='replace')
-            # Retry with fallback model if endpoint not found
-            if retry and (e.code == 404 or 'No endpoints' in err or 'model' in err.lower()):
-                payload['model'] = FALLBACK_MODEL
-                self._call_openrouter(payload, retry=False)
+            # On rate-limit (429) or model not found (404), try next model
+            if e.code in (429, 404) or 'No endpoints' in err or 'rate' in err.lower():
+                print(f'[fallback] {chain[idx]} → {e.code}, trying next…')
+                self._call_with_fallback(payload, chain, idx + 1)
             else:
                 self._json_error(e.code, err[:500])
         except urllib.error.URLError as e:
