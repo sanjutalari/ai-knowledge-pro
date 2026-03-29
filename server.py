@@ -10,7 +10,7 @@ OPENROUTER_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 # Verified working free models on OpenRouter
-FALLBACK_MODEL = 'mistralai/mistral-7b-instruct:free'
+FALLBACK_MODEL = 'google/gemini-2.0-flash-lite-preview-02-05:free'
 
 class Handler(http.server.SimpleHTTPRequestHandler):
 

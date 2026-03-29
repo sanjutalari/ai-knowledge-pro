@@ -16,7 +16,7 @@ const DB = {
 
   // Free models via OpenRouter (verified working)
   OR_MODELS: [
-    { id:'mistralai/mistral-7b-instruct:free',         label:'Mistral 7B — Fast & Free',        badge:'FREE' },
+    { id:'google/gemini-2.0-flash-lite-preview-02-05:free', label:'Gemini 2.0 Flash Lite — Fast',   badge:'FREE' },
     { id:'google/gemma-2-9b-it:free',                  label:'Gemma 2 9B — Google Free',        badge:'FREE' },
     { id:'meta-llama/llama-3.2-3b-instruct:free',      label:'Llama 3.2 3B — Fast Free',        badge:'FREE' },
     { id:'microsoft/phi-3-mini-128k-instruct:free',    label:'Phi-3 Mini 128K — Long Context',  badge:'FREE' },
@@ -81,7 +81,7 @@ const DB = {
   files: [], folders: [], sessions: [], flashcards: [], quizzes: [],
   notes: [], undoStack: [],
   stats: { analyses:0, flashcardsReviewed:0, quizzesTaken:0, quizScore:0, streak:0, xp:0, lastActive:null, badges:[] },
-  settings: { theme:'light', lang:'en', sidebarOpen:true, model:'mistralai/mistral-7b-instruct:free' },
+  settings: { theme:'light', lang:'en', sidebarOpen:true, model:'google/gemini-2.0-flash-lite-preview-02-05:free' },
 
   init() {
     this.files      = JSON.parse(localStorage.getItem('sa_files')      || '[]');
