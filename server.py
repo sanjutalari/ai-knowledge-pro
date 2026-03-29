@@ -1,34 +1,29 @@
 #!/usr/bin/env python3
 """
 StudyAI Pro — Server
-Serves the app and proxies OpenRouter API calls (keeps API key server-side)
+Serves static files + proxies OpenRouter API (keeps key server-side)
 """
 import http.server, socketserver, os, json, urllib.request, urllib.error
-from urllib.parse import urlparse
 
 PORT = int(os.environ.get('PORT', 8000))
 OPENROUTER_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+# Verified working free models on OpenRouter
+FALLBACK_MODEL = 'mistralai/mistral-7b-instruct:free'
+
 class Handler(http.server.SimpleHTTPRequestHandler):
+
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Headers', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Cache-Control', 'no-cache, no-store')
         super().end_headers()
 
     def do_OPTIONS(self):
-        self.send_response(200)
+        self.send_response(204)
         self.end_headers()
-
-    def do_POST(self):
-        if self.path == '/api/chat':
-            self._proxy_openrouter()
-        elif self.path == '/api/health':
-            self._health()
-        else:
-            self.send_error(404)
 
     def do_GET(self):
         if self.path == '/api/health':
@@ -36,29 +31,52 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             super().do_GET()
 
+    def do_POST(self):
+        p = self.path.rstrip('/')
+        if p == '/api/chat':
+            self._proxy_openrouter()
+        else:
+            self._json_error(404, f'Unknown endpoint: {self.path}')
+
     def _health(self):
         body = json.dumps({
-            'status': 'ok',
-            'key_set': bool(OPENROUTER_KEY),
-            'key_preview': OPENROUTER_KEY[:14]+'...' if OPENROUTER_KEY else 'NOT SET'
+            'status':      'ok',
+            'key_set':     bool(OPENROUTER_KEY),
+            'key_preview': (OPENROUTER_KEY[:14] + '...') if OPENROUTER_KEY else 'NOT SET',
+            'fallback_model': FALLBACK_MODEL,
         }).encode()
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', len(body))
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_json(200, body)
 
     def _proxy_openrouter(self):
-        length = int(self.headers.get('Content-Length', 0))
-        body   = self.rfile.read(length)
-
         if not OPENROUTER_KEY:
-            self._json_error(500, 'OPENROUTER_API_KEY not set on server. Add it in Render Environment variables.')
+            self._json_error(500,
+                'OPENROUTER_API_KEY is not set. '
+                'Go to Render dashboard -> Environment -> Add OPENROUTER_API_KEY = sk-or-v1-...'
+            )
             return
 
-        req = urllib.request.Request(
+        length = int(self.headers.get('Content-Length', 0))
+        raw    = self.rfile.read(length)
+
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            self._json_error(400, 'Invalid JSON body')
+            return
+
+        # Normalize model — fallback if invalid
+        model = payload.get('model', '') or FALLBACK_MODEL
+        if '/' not in model:
+            model = FALLBACK_MODEL
+        payload['model'] = model
+
+        self._call_openrouter(payload, retry=True)
+
+    def _call_openrouter(self, payload, retry=True):
+        data = json.dumps(payload).encode()
+        req  = urllib.request.Request(
             'https://openrouter.ai/api/v1/chat/completions',
-            data=body,
+            data=data,
             headers={
                 'Authorization': f'Bearer {OPENROUTER_KEY}',
                 'Content-Type':  'application/json',
@@ -69,32 +87,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         )
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
-                data = resp.read()
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Content-Length', len(data))
-                self.end_headers()
-                self.wfile.write(data)
+                self._send_json(200, resp.read())
         except urllib.error.HTTPError as e:
-            self._json_error(e.code, e.read().decode()[:400])
+            err = e.read().decode('utf-8', errors='replace')
+            # Retry with fallback model if endpoint not found
+            if retry and (e.code == 404 or 'No endpoints' in err or 'model' in err.lower()):
+                payload['model'] = FALLBACK_MODEL
+                self._call_openrouter(payload, retry=False)
+            else:
+                self._json_error(e.code, err[:500])
+        except urllib.error.URLError as e:
+            self._json_error(503, f'Cannot reach OpenRouter: {e.reason}')
         except Exception as ex:
             self._json_error(500, str(ex))
 
-    def _json_error(self, code, msg):
-        body = json.dumps({'error': {'message': msg}}).encode()
+    def _send_json(self, code, body_bytes):
         self.send_response(code)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', len(body))
+        self.send_header('Content-Length', str(len(body_bytes)))
         self.end_headers()
-        self.wfile.write(body)
+        self.wfile.write(body_bytes)
+
+    def _json_error(self, code, msg):
+        self._send_json(code, json.dumps({'error': {'message': msg}}).encode())
 
     def log_message(self, fmt, *args):
-        pass  # suppress logs
+        if len(args) >= 2 and str(args[1]) not in ('200', '204', '304'):
+            print(f'[{args[1]}] {self.path}')
 
-print(f'\n{"="*50}')
-print(f'  StudyAI Pro  →  http://localhost:{PORT}')
-print(f'  API key set: {"YES ✓" if OPENROUTER_KEY else "NO — set OPENROUTER_API_KEY"}')
-print(f'{"="*50}\n')
+print(f'\n{"="*52}')
+print(f'  StudyAI Pro  ->  http://localhost:{PORT}')
+print(f'  OpenRouter key: {"SET ✓" if OPENROUTER_KEY else "NOT SET ✗"}')
+print(f'  Fallback model: {FALLBACK_MODEL}')
+print(f'{"="*52}\n')
 
 with socketserver.TCPServer(('', PORT), Handler) as httpd:
     httpd.allow_reuse_address = True
