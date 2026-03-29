@@ -92,11 +92,26 @@ const Tutor = {
     const el=document.getElementById('tutorSuggestions');
     if(el){
       el.innerHTML='';
-      ['Explain main topics','Key formulas?','Exam tips','Common mistakes','Summarize this','Quiz me'].forEach(s=>{
+      // Dynamic suggestions based on document content
+      const baseSuggestions = ['Explain main topics','Key formulas?','Exam tips','Common mistakes','Summarize this','Quiz me'];
+      const docSuggestions = f?.rawText ? this._generateDocSuggestions(f) : [];
+      const allSuggestions = [...docSuggestions, ...baseSuggestions].slice(0, 8);
+      allSuggestions.forEach(s=>{
         const chip=document.createElement('button');
         chip.className='enhance-btn';chip.textContent=s;chip.onclick=()=>this.sendMessage(s);el.appendChild(chip);
       });
     }
+  },
+
+  _generateDocSuggestions(f) {
+    const text = (f.rawText || '').toLowerCase();
+    const suggestions = [];
+    if (/formula|equation|theorem/.test(text)) suggestions.push('List all formulas');
+    if (/algorithm|code|function/.test(text)) suggestions.push('Explain the algorithms');
+    if (/example|problem/.test(text)) suggestions.push('Solve an example');
+    if (/definition|concept/.test(text)) suggestions.push('Define key terms');
+    if (/compare|difference|vs/.test(text)) suggestions.push('Compare the concepts');
+    return suggestions;
   },
 
   async sendMessage(text) {
@@ -115,10 +130,6 @@ const Tutor = {
         ? `You are a study tutor for "${this.doc.name}". Content: ${this.doc.rawText||this.doc.name}. `
         : 'You are a helpful study tutor. ';
       const lang = DB.settings.lang||'en';
-      const messages = [
-        ...this.history.slice(-8).map(h=>({role:h.role==='user'?'user':'assistant',content:h.text})),
-        {role:'user',content:msg}
-      ];
       const body = {
         model: DB.settings.model || DB.OR_MODELS[0].id,
         max_tokens: 600,
@@ -317,54 +328,138 @@ const Quiz = {
   },
 };
 
-// ══ PROGRESS ══
+// ══ PROGRESS — Study Dashboard ══
 const Progress = {
   refresh() {
     UI.renderSidebar();
     const wrap=document.getElementById('progressContent');
     if(!wrap)return;
-    const {analyses=0,flashcardsReviewed=0,quizzesTaken=0,quizScore=0,streak=0,xp=0,badges=[]}=DB.stats;
-    const allBadges=[
-      {id:'first_upload',name:'First Upload',ic:'📁'},{id:'five_analyses',name:'5 Analyses',ic:'🔬'},
-      {id:'flashmaster',name:'Flash Master',ic:'🃏'},{id:'quizace',name:'Quiz Ace',ic:'🏆'},
-      {id:'streak7',name:'7-Day Streak',ic:'🔥'},{id:'scholar',name:'Scholar',ic:'🎓'},
-      {id:'note_taker',name:'Note Taker',ic:'📝'},
-    ];
-    wrap.innerHTML=`
+    const s = DB.stats;
+    const files = [...DB.files].sort((a,b) => b.added - a.added);
+    const folders = DB.getAllFolders();
+
+    // ── Subject study data ──
+    const subjectData = folders.slice(0,8).map(f => {
+      const fileCount = DB.files.filter(x => x.folder === f.id).length;
+      const sessionCount = DB.sessions.filter(x => {
+        const file = DB.files.find(ff => ff.name === x.name);
+        return file && file.folder === f.id;
+      }).length;
+      return { ...f, fileCount, sessionCount, total: fileCount + sessionCount };
+    }).sort((a,b) => b.total - a.total);
+    const maxTotal = Math.max(...subjectData.map(s => s.total), 1);
+
+    // ── Build HTML ──
+    wrap.innerHTML = `
+      <div class="progress-header">
+        <h2 class="progress-title"><i class="bi bi-bar-chart-fill" style="color:var(--accent)"></i> Study Dashboard</h2>
+        <div style="font-size:12px;color:var(--text3)">Track your learning progress</div>
+      </div>
+
+      <!-- Quick Stats -->
       <div class="stats-grid">
         ${[
-          [analyses,'Analyses','🔬'],[DB.notes.length,'Notes','📝'],
-          [flashcardsReviewed,'Flashcards','🃏'],[quizzesTaken,'Quizzes','❓'],
-          [streak+'🔥','Day streak','🔥'],[xp+'⭐','Total XP','⭐'],
-        ].map(([v,l,ic],i)=>`<div class="stat-card" style="animation-delay:${i*0.07}s">
-          <div style="font-size:26px;margin-bottom:4px">${ic}</div>
-          <div class="stat-card-val">${v}</div><div class="stat-card-label">${l}</div>
+          [DB.files.length, 'Files Uploaded', '📁', 'var(--accent)'],
+          [s.analyses||0, 'Analyses Done', '🔬', 'var(--purple)'],
+          [DB.notes.length, 'Notes Created', '📝', 'var(--green)'],
+          [(s.streak||0) + ' days', 'Study Streak', '🔥', 'var(--amber)'],
+        ].map(([v,l,ic,c],i) => `<div class="stat-card" style="animation-delay:${i*0.07}s">
+          <div style="font-size:24px;margin-bottom:4px">${ic}</div>
+          <div class="stat-card-val" style="color:${c}">${v}</div>
+          <div class="stat-card-label">${l}</div>
         </div>`).join('')}
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px">
-        <h4 style="font-family:var(--ff-head);font-size:16px;font-weight:500;margin-bottom:16px">📚 Activity by Subject</h4>
-        ${DB.getAllFolders().slice(0,6).map(f=>{
-          const cnt=DB.files.filter(x=>x.folder===f.id).length;
-          const pct=DB.files.length?Math.round((cnt/DB.files.length)*100):0;
-          return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-            <span style="font-size:12px;width:140px;color:var(--text2)">${f.ic} ${f.label}</span>
-            <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-              <div style="height:100%;background:${f.color};border-radius:3px;width:${pct}%;transition:width .7s ease"></div>
-            </div>
-            <span style="font-size:12px;color:var(--text3);width:20px;text-align:right">${cnt}</span>
-          </div>`;
-        }).join('')}
-      </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px">
-        <h4 style="font-family:var(--ff-head);font-size:16px;font-weight:500;margin-bottom:16px">🏅 Badges</h4>
-        <div class="badge-grid">
-          ${allBadges.map(b=>`<div class="badge-item${badges.includes(b.id)?'':' locked'}">
-            <span style="font-size:20px">${b.ic}</span><span style="font-size:12px">${b.name}</span>
-          </div>`).join('')}
+
+      <!-- Subject Study Breakdown -->
+      <div class="progress-section">
+        <h4 class="progress-section-title"><i class="bi bi-pie-chart-fill" style="color:var(--purple)"></i> Subject Study Breakdown</h4>
+        <div class="subject-chart">
+          ${subjectData.map(f => {
+            const pct = Math.round((f.total / maxTotal) * 100);
+            return `<div class="subject-row">
+              <div class="subject-label">
+                <span style="font-size:16px">${f.ic}</span>
+                <span>${f.label}</span>
+              </div>
+              <div class="subject-bar-wrap">
+                <div class="subject-bar" style="width:${pct}%;background:${f.color};transition:width .8s ease"></div>
+              </div>
+              <div class="subject-count">
+                <span class="subject-files">${f.fileCount} files</span>
+                <span class="subject-sessions">${f.sessionCount} sessions</span>
+              </div>
+            </div>`;
+          }).join('')}
+          ${!subjectData.some(s => s.total > 0) ? '<div style="font-size:12px;color:var(--text4);text-align:center;padding:16px">Upload documents to see subject breakdown</div>' : ''}
         </div>
       </div>
-      <div style="background:var(--green-bg);border:1px solid var(--green);border-radius:var(--radius-lg);padding:14px 18px;font-size:13px;color:var(--green)">
-        ✅ <strong>100% Free</strong> — Using OpenRouter free tier: Llama 3.1 8B, Mistral 7B, Gemma 2 9B. Zero cost for you and users.
-      </div>`;
+
+      <!-- File Upload History -->
+      <div class="progress-section">
+        <h4 class="progress-section-title"><i class="bi bi-clock-history" style="color:var(--accent)"></i> File Upload History</h4>
+        <div class="file-timeline">
+          ${files.length ? files.slice(0,10).map((f, i) => {
+            const ft = DB.getft(f.name);
+            const folder = DB.getFolderById(f.folder);
+            const date = new Date(f.added);
+            const dateStr = date.toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
+            const timeStr = date.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'});
+            return `<div class="timeline-item" style="animation-delay:${i*0.05}s">
+              <div class="timeline-dot" style="background:${ft.dot}"></div>
+              <div class="timeline-content">
+                <div class="timeline-file">
+                  <span class="timeline-icon" style="background:${ft.bg}">${ft.ic}</span>
+                  <div>
+                    <div class="timeline-name">${f.name}</div>
+                    <div class="timeline-meta">${ft.label} · ${DB.fmtSize(f.size)}${folder ? ' → ' + folder.ic + ' ' + folder.label : ''}</div>
+                  </div>
+                </div>
+                <div class="timeline-date">${dateStr} · ${timeStr}</div>
+              </div>
+            </div>`;
+          }).join('') : '<div style="font-size:12px;color:var(--text4);text-align:center;padding:16px">No files uploaded yet</div>'}
+        </div>
+      </div>
+
+      <!-- Recent Analysis Sessions -->
+      <div class="progress-section">
+        <h4 class="progress-section-title"><i class="bi bi-journal-text" style="color:var(--green)"></i> Recent Analysis Sessions</h4>
+        <div class="sessions-list">
+          ${DB.sessions.length ? DB.sessions.slice(0,6).map((ses, i) => `
+            <div class="session-item" style="animation-delay:${i*0.05}s" onclick="Analyzer.lastResult={text:${JSON.stringify(JSON.stringify(ses.result))}.slice(1,-1),mode:'${ses.mode||''}',file:'${ses.name||''}'};Nav.go('analyzer');Analyzer._renderResult(Analyzer.lastResult.text);document.getElementById('azResultHdr').style.display='flex'">
+              <div class="session-icon">📋</div>
+              <div class="session-info">
+                <div class="session-name">${ses.mode||'Analysis'} — ${ses.name||'Document'}</div>
+                <div class="session-date">${ses.date||'Unknown date'}</div>
+              </div>
+              <i class="bi bi-chevron-right" style="color:var(--text4)"></i>
+            </div>
+          `).join('') : '<div style="font-size:12px;color:var(--text4);text-align:center;padding:16px">No sessions yet. Analyze a document to create one.</div>'}
+        </div>
+      </div>
+
+      <!-- Achievements -->
+      <div class="progress-section">
+        <h4 class="progress-section-title"><i class="bi bi-trophy-fill" style="color:var(--amber)"></i> Achievements · ${s.xp||0} XP</h4>
+        <div class="badge-grid">
+          ${[
+            {id:'first_upload',name:'First Upload',ic:'📁',desc:'Upload your first file',cond:DB.files.length>=1},
+            {id:'five_analyses',name:'5 Analyses',ic:'🔬',desc:'Complete 5 analyses',cond:(s.analyses||0)>=5,progress:`${Math.min(s.analyses||0,5)}/5`},
+            {id:'flashmaster',name:'Flash Master',ic:'🃏',desc:'Review 20 flashcards',cond:(s.flashcardsReviewed||0)>=20,progress:`${Math.min(s.flashcardsReviewed||0,20)}/20`},
+            {id:'quizace',name:'Quiz Ace',ic:'🏆',desc:'Take 5 quizzes',cond:(s.quizzesTaken||0)>=5,progress:`${Math.min(s.quizzesTaken||0,5)}/5`},
+            {id:'streak7',name:'7-Day Streak',ic:'🔥',desc:'Study 7 days in a row',cond:(s.streak||0)>=7,progress:`${Math.min(s.streak||0,7)}/7`},
+            {id:'scholar',name:'Scholar',ic:'🎓',desc:'Earn 500 XP',cond:(s.xp||0)>=500,progress:`${Math.min(s.xp||0,500)}/500`},
+            {id:'note_taker',name:'Note Taker',ic:'📝',desc:'Create 5 notes',cond:DB.notes.length>=5,progress:`${Math.min(DB.notes.length,5)}/5`},
+          ].map(b => {
+            const unlocked = (s.badges||[]).includes(b.id);
+            return `<div class="badge-item${unlocked?'':' locked'}">
+              <span style="font-size:24px">${b.ic}</span>
+              <span class="badge-name">${b.name}</span>
+              <span class="badge-desc">${unlocked ? '✓ Unlocked' : (b.progress || b.desc)}</span>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
   },
 };

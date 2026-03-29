@@ -127,7 +127,8 @@ const App = {
     files.forEach(file=>{
       if(DB.files.find(x=>x.name===file.name&&x.size===file.size)){done++;return;}
       const id=DB.uid();
-      const entry={id,name:file.name,size:file.size,type:DB.ext(file.name),folder:null,starred:false,added:Date.now(),rawText:null,b64:null};
+      const detectedFolder = this._detectSubject(file.name, null);
+      const entry={id,name:file.name,size:file.size,type:DB.ext(file.name),folder:detectedFolder,starred:false,added:Date.now(),rawText:null,b64:null};
       const reader=new FileReader();
       const isPDF=file.type==='application/pdf'||file.name.endsWith('.pdf');
       const isImg=/\.(png|jpg|jpeg)$/i.test(file.name);
@@ -138,17 +139,82 @@ const App = {
         reader.onload=ev=>{entry.b64=ev.target.result.split(',')[1];entry.rawText='[Image]';DB.files.unshift(entry);DB.save();if(++done===files.length)this._afterUpload(entry);};
         reader.readAsDataURL(file);
       }else{
-        reader.onload=ev=>{entry.rawText=ev.target.result.substring(0,10000);DB.files.unshift(entry);DB.save();if(++done===files.length)this._afterUpload(entry);};
+        reader.onload=ev=>{
+          entry.rawText=ev.target.result.substring(0,10000);
+          // Auto-detect subject from text content
+          const detected = this._detectSubject(file.name, entry.rawText);
+          if (detected) entry.folder = detected;
+          DB.files.unshift(entry);DB.save();if(++done===files.length)this._afterUpload(entry);
+        };
         reader.readAsText(file);
       }
     });
   },
 
   _afterUpload(entry){
+    const folder = DB.getFolderById(entry.folder);
+    const folderMsg = folder ? ` → ${folder.ic} ${folder.label}` : '';
     UI.renderSidebar();FM.render();Analyzer.setActiveFile(entry);
     DB.addXP(10);const badge=DB.checkBadges();
     if(badge)UI.toast(`🏆 Badge: ${badge.name}!`,'success',4000);
-    UI.toast(`✓ ${entry.name} uploaded`,'success');Progress.refresh();
+    UI.toast(`✓ ${entry.name} uploaded${folderMsg}`,'success');Progress.refresh();
+  },
+
+  // ── AUTO-CATEGORIZATION ──
+  _detectSubject(fileName, rawText) {
+    if (!DB.SUBJECT_KEYWORDS) return null;
+    const text = ((fileName || '') + ' ' + (rawText || '')).toLowerCase();
+    let bestId = null, bestScore = 0;
+
+    for (const [folderId, keywords] of Object.entries(DB.SUBJECT_KEYWORDS)) {
+      let score = 0;
+      for (const kw of keywords) {
+        // Count occurrences (capped at 5 per keyword to avoid bias)
+        const regex = new RegExp(kw.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'), 'gi');
+        const matches = text.match(regex);
+        if (matches) score += Math.min(matches.length, 5);
+      }
+      if (score > bestScore) { bestScore = score; bestId = folderId; }
+    }
+    // Require minimum confidence (at least 3 keyword matches)
+    return bestScore >= 3 ? bestId : null;
+  },
+
+  // ── URL SUMMARIZER ──
+  async summarizeUrl(urlInput) {
+    const url = (typeof urlInput === 'string' ? urlInput : document.getElementById('urlInput')?.value)?.trim();
+    if (!url) { UI.toast('Enter a URL first', 'error'); return; }
+    if (!/^https?:\/\//i.test(url)) { UI.toast('Enter a valid URL starting with http:// or https://', 'error'); return; }
+
+    UI.toast('Fetching URL content…', 'info');
+    try {
+      const res = await fetch('/api/fetch-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || data.error);
+
+      const text = (data.text || '').substring(0, 10000);
+      if (!text || text.length < 20) throw new Error('Could not extract text from URL');
+
+      const title = data.title || new URL(url).hostname;
+      const entry = {
+        id: DB.uid(), name: title.substring(0, 60) + '.url',
+        size: text.length, type: 'txt',
+        folder: this._detectSubject(title, text),
+        starred: false, added: Date.now(), rawText: text, b64: null
+      };
+      DB.files.unshift(entry); DB.save();
+      this._afterUpload(entry);
+
+      // Clear URL input
+      const inp = document.getElementById('urlInput');
+      if (inp) inp.value = '';
+    } catch (err) {
+      UI.toast('URL Error: ' + err.message, 'error');
+    }
   },
 
   toggleSidebar(){const sb=document.getElementById('sidebar');if(!sb)return;sb.classList.toggle('collapsed');DB.settings.sidebarOpen=!sb.classList.contains('collapsed');DB.save();},

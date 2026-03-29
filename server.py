@@ -3,7 +3,8 @@
 StudyAI Pro — Server
 Serves static files + proxies OpenRouter API (keeps key server-side)
 """
-import http.server, socketserver, os, json, urllib.request, urllib.error
+import http.server, socketserver, os, json, urllib.request, urllib.error, re
+from html.parser import HTMLParser
 
 PORT = int(os.environ.get('PORT', 8000))
 OPENROUTER_KEY = os.environ.get('OPENROUTER_API_KEY', '')
@@ -44,6 +45,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         p = self.path.rstrip('/')
         if p == '/api/chat':
             self._proxy_openrouter()
+        elif p == '/api/fetch-url':
+            self._fetch_url()
         else:
             self._json_error(404, f'Unknown endpoint: {self.path}')
 
@@ -117,6 +120,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json_error(503, f'Cannot reach OpenRouter: {e.reason}')
         except Exception as ex:
             self._json_error(500, str(ex))
+
+    def _fetch_url(self):
+        length = int(self.headers.get('Content-Length', 0))
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw)
+        except Exception:
+            self._json_error(400, 'Invalid JSON body')
+            return
+
+        url = payload.get('url', '')
+        if not url or not url.startswith('http'):
+            self._json_error(400, 'Invalid URL')
+            return
+
+        try:
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (StudyAI Pro URL Fetcher)',
+            })
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                html = resp.read().decode('utf-8', errors='replace')[:200000]
+
+            # Extract title
+            title_match = re.search(r'<title[^>]*>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+            title = title_match.group(1).strip() if title_match else url
+
+            # Strip HTML tags to get plain text
+            text = re.sub(r'<script[^>]*>.*?</script>', '', html, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<[^>]+>', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()[:10000]
+
+            body = json.dumps({'text': text, 'title': title}).encode()
+            self._send_json(200, body)
+        except Exception as ex:
+            self._json_error(500, f'Failed to fetch URL: {str(ex)[:200]}')
 
     def _send_json(self, code, body_bytes):
         self.send_response(code)

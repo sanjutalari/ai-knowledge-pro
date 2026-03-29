@@ -592,51 +592,67 @@ Return only the JSON array, no other text.`
     UI.toast('Highlight saved to notes 📝', 'success', 2000);
   },
 
-  // ── CONTEXT MENU (unchanged + enhanced) ──
+  // ── CONTEXT MENU + TEXT SELECTION POPUP ──
   _initContextMenu() {
     const ctx = document.getElementById('ctxMenu');
     if (!ctx) return;
 
-    document.addEventListener('contextmenu', e => {
-      const docBody = document.getElementById('azDocBody');
-      const result  = document.getElementById('azResult');
-      const inDoc   = docBody?.contains(e.target) || result?.contains(e.target);
-      if (!inDoc) return;
-
-      e.preventDefault();
+    // Text selection popup (mouseup)
+    document.addEventListener('mouseup', e => {
+      const result = document.getElementById('azResult');
+      if (!result?.contains(e.target)) return;
       const sel = window.getSelection()?.toString().trim();
-
-      ctx.innerHTML = `
-        <div class="ctx-item" onclick="Notes.add(${JSON.stringify(sel||'')});Notes._closeCtx()">
-          <i class="bi bi-journal-plus"></i> ${sel ? 'Save to Notes: "' + sel.slice(0,25) + (sel.length>25?'…':'')+'"' : 'Add Note'}
-        </div>
-        <div class="ctx-item" onclick="Notes._openFeedback(${JSON.stringify(sel||'')});Notes._closeCtx()">
-          <i class="bi bi-chat-dots"></i> Ask Tutor about this
-        </div>
-        ${sel ? `<div class="ctx-item" onclick="Notes._askAIExpand(${JSON.stringify(sel)});Notes._closeCtx()">
-          <i class="bi bi-stars"></i> AI Explain this
-        </div>` : ''}
-        <div class="ctx-sep"></div>
-        <div class="ctx-item" onclick="Notes._copyText(${JSON.stringify(sel||'')});Notes._closeCtx()">
-          <i class="bi bi-clipboard"></i> Copy
-        </div>
-        <div class="ctx-item" onclick="Notes._highlight();Notes._closeCtx()">
-          <i class="bi bi-highlighter"></i> Highlight
-        </div>
-        <div class="ctx-sep"></div>
-        <div class="ctx-item" onclick="Notes._closeCtx()">
-          <i class="bi bi-x-lg"></i> Close
-        </div>`;
-
-      const x = Math.min(e.clientX, window.innerWidth - 230);
-      const y = Math.min(e.clientY, window.innerHeight - 260);
-      ctx.style.left = x + 'px';
-      ctx.style.top  = y + 'px';
-      ctx.style.display = 'block';
+      if (!sel || sel.length < 2) return;
+      setTimeout(() => {
+        const finalSel = window.getSelection()?.toString().trim();
+        if (!finalSel || finalSel.length < 2) return;
+        this._showCtxMenu(ctx, e.clientX, e.clientY, finalSel);
+      }, 80);
     });
 
-    document.addEventListener('click', () => this._closeCtx());
+    // Right-click context menu
+    document.addEventListener('contextmenu', e => {
+      const result = document.getElementById('azResult');
+      if (!result?.contains(e.target)) return;
+      e.preventDefault();
+      const sel = window.getSelection()?.toString().trim();
+      this._showCtxMenu(ctx, e.clientX, e.clientY, sel);
+    });
+
+    document.addEventListener('mousedown', e => {
+      if (!ctx.contains(e.target)) this._closeCtx();
+    });
     document.addEventListener('keydown', e => { if (e.key === 'Escape') this._closeCtx(); });
+  },
+
+  _showCtxMenu(ctx, cx, cy, sel) {
+    const selStr = JSON.stringify(sel || '');
+    ctx.innerHTML = `
+      <div class="ctx-item" onclick="Notes.add(${selStr});Notes._closeCtx()">
+        <i class="bi bi-journal-plus"></i> ${sel ? 'Save to Notes: "' + sel.slice(0,25) + (sel.length>25?'…':'') + '"' : 'Add Note'}
+      </div>
+      <div class="ctx-item" onclick="Notes._openFeedback(${selStr});Notes._closeCtx()">
+        <i class="bi bi-chat-dots"></i> Ask Tutor about this
+      </div>
+      ${sel ? `<div class="ctx-item" onclick="Notes._askAIExpand(${selStr});Notes._closeCtx()">
+        <i class="bi bi-stars"></i> AI Explain this
+      </div>` : ''}
+      <div class="ctx-sep"></div>
+      <div class="ctx-item" onclick="Notes._copyText(${selStr});Notes._closeCtx()">
+        <i class="bi bi-clipboard"></i> Copy
+      </div>
+      <div class="ctx-item" onclick="Notes._highlight();Notes._closeCtx()">
+        <i class="bi bi-highlighter"></i> Highlight
+      </div>
+      <div class="ctx-sep"></div>
+      <div class="ctx-item" onclick="Notes._closeCtx()">
+        <i class="bi bi-x-lg"></i> Close
+      </div>`;
+    const x = Math.min(cx, window.innerWidth - 230);
+    const y = Math.min(cy, window.innerHeight - 280);
+    ctx.style.left = x + 'px';
+    ctx.style.top  = y + 'px';
+    ctx.style.display = 'block';
   },
 
   _closeCtx() {

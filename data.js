@@ -23,6 +23,18 @@ const DB = {
     { id:'nvidia/nemotron-nano-9b-v2:free',             label:'Nemotron 9B — NVIDIA Free',       badge:'FREE' },
   ],
 
+  // Subject keyword detection for auto-categorization
+  SUBJECT_KEYWORDS: {
+    cs:   ['algorithm','programming','data structure','compiler','database','operating system','cpu','binary','code','function','class','loop','array','stack','queue','linked list','graph theory','tree','software','hardware','html','css','javascript','python','java','sql','recursion','sorting','hashing','oop','api','network','server','process','thread','memory management','deadlock','scheduling','file system','encryption'],
+    math: ['derivative','integral','calculus','equation','matrix','algebra','geometry','theorem','probability','statistics','polynomial','logarithm','trigonometry','set theory','limit','continuity','vector','determinant','eigenvalue','differential','series','taylor','maclaurin','fourier','linear algebra','number theory','permutation','combination','factorial','mean','median','variance'],
+    phy:  ['force','velocity','acceleration','energy','momentum','thermodynamics','quantum','wave','electricity','magnetism','newton','optics','gravity','mass','friction','torque','angular','electromagnetic','capacitor','resistor','voltage','current','circuit','entropy','carnot','gas law','boyle','charles','photon','spectrum','refraction','diffraction'],
+    chem: ['element','compound','reaction','molecule','atom','organic','inorganic','acid','base','oxidation','bond','periodic table','mole','equilibrium','electron','proton','neutron','isotope','catalyst','titration','stoichiometry','polymer','hydrocarbon','aldehyde','ketone','ester','ph','buffer','electrochemistry','thermochemistry'],
+    bio:  ['cell','dna','rna','protein','evolution','ecosystem','genetics','organism','mitosis','meiosis','metabolism','anatomy','photosynthesis','respiration','enzyme','chromosome','gene','allele','mutation','natural selection','taxonomy','ecology','neuron','hormone','antibody','virus','bacteria','nucleus','organelle','membrane'],
+    eco:  ['supply','demand','gdp','inflation','market','fiscal','monetary','trade','microeconomics','macroeconomics','elasticity','equilibrium price','opportunity cost','comparative advantage','monopoly','oligopoly','interest rate','unemployment','budget','tax','subsidy','exchange rate','balance of payments','aggregate'],
+    eng:  ['grammar','essay','literature','poetry','novel','rhetoric','syntax','vocabulary','comprehension','metaphor','simile','alliteration','narrative','thesis','argument','paragraph','pronoun','adjective','adverb','conjunction','preposition','tense','literary analysis','shakespeare','prose','stanza','sonnet'],
+    hist: ['war','empire','civilization','revolution','dynasty','colonialism','independence','medieval','ancient','renaissance','industrial revolution','world war','treaty','constitution','democracy','monarchy','republic','cold war','nationalism','imperialism','reformation','enlightenment','feudal','archaeological']
+  },
+
   DEFAULT_FOLDERS: [
     { id:'cs',   label:'Computer Science', ic:'💻', color:'#534AB7', parent:null, children:[] },
     { id:'math', label:'Mathematics',      ic:'📐', color:'#1D9E75', parent:null, children:[] },
@@ -43,6 +55,8 @@ const DB = {
     { id:'lastnight', ic:'🌙', label:'Last night',     desc:'1-hr sprint' },
     { id:'beginner',  ic:'🌱', label:'Beginner+',      desc:'Deep learning' },
     { id:'strategy',  ic:'🎯', label:'Exam strategy',  desc:'Score plan' },
+    { id:'math',      ic:'🧮', label:'Math Solver',    desc:'Step-by-step' },
+    { id:'homework',  ic:'📝', label:'Homework Help',  desc:'Guided answers' },
   ],
 
   PROMPTS: {
@@ -54,6 +68,8 @@ const DB = {
     lastnight: `Last-night revision only. ## per topic. ONLY: key definitions, important formulas, diagrams in text, tricky points, common mistakes, repeated exam questions. Very short bullet points.`,
     beginner:  `Teach from zero. ## per topic. Simple definition, step-by-step explanation, real-life example, code example if applicable, exam points, 2 practice questions with answers.`,
     strategy:  `Smart Exam Strategy report. Create ## sections: Easy scoring topics, High-weightage topics, Risky topics, Time allocation table (topic | time | priority), Recommended writing order, Quick win topics. Priority score each topic 1-10.`,
+    math:      `Solve all math problems in this document step by step. For each problem: ## Problem heading. Show: the problem statement, identify what's given and what to find, write the formula used, show each calculation step clearly, box the final answer. If there are proofs, show them rigorously. End with ## Key Formulas summary.`,
+    homework:  `Act as a homework helper. For each topic/problem in this document: ## heading. Provide: clear explanation, step-by-step solution, key concepts used, tips to remember, similar practice problems with answers. Be encouraging and educational. End with ## Study Tips section.`,
   },
 
   LANGS: {

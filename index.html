@@ -143,6 +143,13 @@
               <div class="dz-text">Drop files or click to upload</div>
               <div class="dz-hint">PDF, DOCX, PPTX, TXT, XLSX, Images</div>
             </div>
+            <div class="url-input-wrap">
+              <div class="url-bar">
+                <i class="bi bi-link-45deg" style="color:var(--accent);font-size:16px"></i>
+                <input type="text" id="urlInput" class="url-input" placeholder="Paste a URL to summarize (articles, blogs, docs)…" onkeydown="if(event.key==='Enter')App.summarizeUrl()">
+                <button class="url-btn" onclick="App.summarizeUrl()"><i class="bi bi-arrow-right"></i></button>
+              </div>
+            </div>
           </div>
 
           <div class="az-panel" id="azDocCard">
@@ -182,6 +189,7 @@
               <span id="azResultLabel">Analysis</span>
             </div>
             <div class="result-actions">
+              <button class="btn-sm" onclick="Analyzer.showMindMap()"><i class="bi bi-diagram-3"></i> Mind Map</button>
               <button class="btn-sm" onclick="Analyzer.saveToNotes()"><i class="bi bi-journal-plus"></i> Notes</button>
               <button class="btn-sm" onclick="Analyzer.copyResult()"><i class="bi bi-clipboard"></i> Copy</button>
               <button class="btn-sm" onclick="Analyzer.exportResult()"><i class="bi bi-download"></i> Export</button>
@@ -276,7 +284,7 @@
         <div id="tutorSuggestions" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0"></div>
         <div class="tutor-msgs" id="tutorMessages">
           <div class="msg-bubble msg-ai">
-            👋 Hi! I'm your free AI study tutor — powered by Llama 3 & Gemini via OpenRouter. Upload a document and ask me anything!
+            👋 Hi! I'm your free AI study tutor powered by Llama 3 & Gemini. Upload a document and ask me anything — I'll explain, solve, quiz you, or break it down step by step!
           </div>
         </div>
         <div class="tutor-input-area">
