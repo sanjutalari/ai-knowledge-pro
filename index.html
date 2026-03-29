@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StudyAI Pro — Free AI Document Analyzer</title>
+
+<!-- Bootstrap 5 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<!-- Bootstrap Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<!-- App CSS (includes all design + animation overrides) -->
+<link rel="stylesheet" href="css/app.css">
+
+<style>
+/* Bootstrap 5 integration tweaks */
+.btn { font-family: var(--ff-body) !important; }
+.modal-backdrop { display: none !important; } /* use our custom modal */
+.free-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: linear-gradient(135deg, var(--green-bg), var(--accent-bg));
+  border: 1px solid var(--green);
+  color: var(--green); font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px; letter-spacing: .5px;
+  animation: freeBadgePulse 3s ease-in-out infinite;
+}
+@keyframes freeBadgePulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+
+/* Model selector with FREE tag */
+.model-sel-wrap { position: relative; }
+.model-sel-wrap::after {
+  content: '🆓 FREE';
+  position: absolute; right: 32px; top: 50%; transform: translateY(-50%);
+  font-size: 9px; font-weight: 700; color: var(--green);
+  pointer-events: none;
+}
+/* Topbar FREE badge */
+.topbar-free {
+  font-size: 10px; font-weight: 700; color: var(--green);
+  background: var(--green-bg); border: 1px solid var(--green);
+  padding: 2px 8px; border-radius: 20px;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<!-- ══ TOPBAR ══ -->
+<header class="topbar">
+  <div class="logo">
+    <div class="logo-mark">SA</div>
+    <span class="logo-name">StudyAI</span>
+    <span class="logo-badge">PRO</span>
+  </div>
+
+  <nav class="nav-tabs" id="navTabs">
+    <button class="ntab active" data-page="analyzer"  onclick="Nav.go('analyzer')">  <i class="bi bi-book-fill"></i>        <span>Analyzer</span></button>
+    <button class="ntab"        data-page="files"      onclick="Nav.go('files')">      <i class="bi bi-folder-fill"></i>      <span>Files</span></button>
+    <button class="ntab"        data-page="flashcards" onclick="Nav.go('flashcards')"> <i class="bi bi-card-text"></i>        <span>Flashcards</span></button>
+    <button class="ntab"        data-page="quiz"       onclick="Nav.go('quiz')">        <i class="bi bi-patch-question-fill"></i><span>Quiz</span></button>
+    <button class="ntab"        data-page="tutor"      onclick="Nav.go('tutor')">      <i class="bi bi-mortarboard-fill"></i> <span>Tutor</span></button>
+    <button class="ntab"        data-page="progress"   onclick="Nav.go('progress')">   <i class="bi bi-bar-chart-fill"></i>   <span>Progress</span></button>
+  </nav>
+
+  <div class="tb-right">
+    <span class="topbar-free d-none d-md-flex"><i class="bi bi-stars"></i> OpenRouter FREE</span>
+    <input type="text" id="globalSearch" class="tb-search" placeholder="Search files…" oninput="App.search(this.value)">
+    <span class="lang-badge" id="langBadge" style="font-size:11px;font-weight:600;color:var(--text3);padding:0 4px">EN</span>
+    <label class="upload-btn" title="Upload file">
+      <i class="bi bi-upload"></i> <span class="d-none d-sm-inline">Upload</span>
+      <input type="file" id="fileInput" multiple accept=".pdf,.pptx,.docx,.txt,.xlsx,.png,.jpg,.jpeg" onchange="App.handleUpload(event)" style="display:none">
+    </label>
+    <button class="icon-btn" onclick="Notes.toggle()" id="notesToggleBtn" title="Notes panel"><i class="bi bi-journal-text"></i></button>
+    <button class="icon-btn" id="themeToggle" onclick="App.toggleTheme()" title="Toggle theme"><i class="bi bi-moon-fill"></i></button>
+    <button class="icon-btn" onclick="App.showSettings()" title="Settings"><i class="bi bi-gear-fill"></i></button>
+    <div class="xp-chip" id="xpChip">⭐ <span id="xpCount">0</span> XP</div>
+  </div>
+</header>
+
+<!-- ══ APP BODY ══ -->
+<div class="app-body">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <button class="sidebar-toggle-btn" onclick="App.toggleSidebar()" title="Toggle sidebar">‹</button>
+    <div class="sb-inner">
+
+      <div class="sb-stats" id="sbStats"></div>
+
+      <div class="sb-section">
+        <div class="sb-label">Library</div>
+        <div class="tree-row active" data-view="all"     onclick="App.setView('all')">    <span>🗂️</span><span>All files</span>  <span class="tree-count" id="cnt-all">0</span></div>
+        <div class="tree-row"        data-view="recent"  onclick="App.setView('recent')"> <span>🕐</span><span>Recent</span>    <span class="tree-count" id="cnt-recent">0</span></div>
+        <div class="tree-row"        data-view="starred" onclick="App.setView('starred')"><span>⭐</span><span>Starred</span>   <span class="tree-count" id="cnt-starred">0</span></div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">By type</div>
+        <div id="typeTree"></div>
+      </div>
+
+      <div class="sb-section" style="flex:1">
+        <div class="sb-label">Folders <button class="sb-add" onclick="App.showNewFolderModal()">+</button></div>
+        <div id="folderTree"></div>
+      </div>
+
+      <div class="sb-bottom">
+        <div class="streak-card" id="streakCard"></div>
+        <div class="sb-lang">
+          <select id="langSel" onchange="App.setLang(this.value)">
+            <option value="en">🌐 English</option>
+            <option value="hi">🇮🇳 Hindi</option>
+            <option value="te">🇮🇳 Telugu</option>
+            <option value="ta">🇮🇳 Tamil</option>
+            <option value="es">🇪🇸 Spanish</option>
+            <option value="fr">🇫🇷 French</option>
+            <option value="de">🇩🇪 German</option>
+            <option value="zh">🇨🇳 Chinese</option>
+            <option value="ar">🇸🇦 Arabic</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+
+    <!-- ══ ANALYZER ══ -->
+    <div class="page active" id="pg-analyzer">
+      <div class="az-layout">
+
+        <div class="az-left" id="azLeft">
+
+          <div class="az-panel">
+            <div class="az-panel-title">Document</div>
+            <div class="dropzone" id="dropZone"
+              ondragover="event.preventDefault();this.classList.add('dragging')"
+              ondragleave="this.classList.remove('dragging')"
+              ondrop="this.classList.remove('dragging');App._processFiles(Array.from(event.dataTransfer.files));event.preventDefault()">
+              <input type="file" multiple accept=".pdf,.pptx,.docx,.txt,.xlsx,.png,.jpg,.jpeg" onchange="App.handleUpload(event)">
+              <div class="dz-icon">📎</div>
+              <div class="dz-text">Drop files or click to upload</div>
+              <div class="dz-hint">PDF, DOCX, PPTX, TXT, XLSX, Images</div>
+            </div>
+          </div>
+
+          <div class="az-panel" id="azDocCard">
+            <div class="az-panel-title">Active File</div>
+            <div style="font-size:12px;color:var(--text4);text-align:center;padding:8px">Upload or select a file above</div>
+          </div>
+
+          <div class="az-panel">
+            <div class="az-panel-title">Analysis Mode</div>
+            <div class="mode-grid" id="modeGrid"></div>
+          </div>
+
+          <div class="az-panel">
+            <div class="az-panel-title">
+              Free AI Model
+              <span class="free-badge ms-1"><i class="bi bi-stars"></i> FREE</span>
+            </div>
+            <div class="model-sel-wrap">
+              <select class="model-sel" id="modelSel" onchange="DB.settings.model=this.value;DB.save()"></select>
+            </div>
+            <button class="az-btn mt-2" id="azBtn" onclick="Analyzer.runAnalysis()" disabled>
+              <i class="bi bi-upload"></i> Upload first
+            </button>
+            <div style="font-size:11px;color:var(--text4);text-align:center;margin-top:6px">
+              Llama 3 · Mistral · Gemma · No API key needed
+            </div>
+          </div>
+
+        </div>
+
+        <div class="resizer" id="resizer"></div>
+
+        <div class="az-right">
+          <div class="result-hdr" id="azResultHdr" style="display:none">
+            <div class="result-label">
+              <i class="bi bi-stars" style="color:var(--accent)"></i>
+              <span id="azResultLabel">Analysis</span>
+            </div>
+            <div class="result-actions">
+              <button class="btn-sm" onclick="Analyzer.saveToNotes()"><i class="bi bi-journal-plus"></i> Notes</button>
+              <button class="btn-sm" onclick="Analyzer.copyResult()"><i class="bi bi-clipboard"></i> Copy</button>
+              <button class="btn-sm" onclick="Analyzer.exportResult()"><i class="bi bi-download"></i> Export</button>
+              <button class="btn-sm" onclick="Analyzer.toggleTTS()"><i class="bi bi-volume-up"></i> Read</button>
+              <button class="btn-sm" onclick="Analyzer.saveSession()"><i class="bi bi-bookmark"></i> Save</button>
+            </div>
+          </div>
+          <div class="az-result-area" id="azResult">
+            <div class="empty-state">
+              <div class="es-icon">📄</div>
+              <p>Upload a document, select an analysis mode, and click Analyze.<br><br>
+              <strong style="color:var(--green)">100% Free</strong> — Llama 3, Mistral & Gemma via OpenRouter. No API key needed in browser.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ FILES ══ -->
+    <div class="page" id="pg-files">
+      <div class="files-page">
+        <div class="files-toolbar">
+          <span style="font-size:13px;font-weight:500;color:var(--text1)">📁 Files</span>
+          <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+            <select class="btn-sm" style="height:28px" onchange="FM.setSortBy(this.value)">
+              <option value="date">Date</option>
+              <option value="name">Name</option>
+              <option value="size">Size</option>
+              <option value="type">Type</option>
+            </select>
+            <button class="btn-sm" onclick="FM.openInAnalyzer()"><i class="bi bi-book"></i> Analyze</button>
+            <button class="btn-sm" onclick="FM.moveSelected()"><i class="bi bi-folder-symlink"></i> Move</button>
+            <label class="btn-sm accent" style="cursor:pointer">
+              <i class="bi bi-upload"></i> Upload
+              <input type="file" multiple style="display:none" onchange="App.handleUpload(event)">
+            </label>
+          </div>
+        </div>
+        <div id="fmFiles" style="flex:1;overflow-y:auto;padding:16px 20px"></div>
+      </div>
+    </div>
+
+    <!-- ══ FLASHCARDS ══ -->
+    <div class="page" id="pg-flashcards">
+      <div class="fc-page">
+        <div class="fc-controls">
+          <span style="font-size:13px;font-weight:500">🃏 Flashcards</span>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn-sm accent" onclick="Flashcards.generateFromDoc(Analyzer.activeFile)">
+              <i class="bi bi-lightning-charge-fill"></i> Generate Free
+            </button>
+            <button class="btn-sm" onclick="Flashcards.shuffle()"><i class="bi bi-shuffle"></i> Shuffle</button>
+          </div>
+        </div>
+        <div id="flashcardsContent" style="flex:1;overflow-y:auto;display:flex;flex-direction:column">
+          <div class="empty-state">
+            <div class="es-icon">🃏</div>
+            <p>Select a file in Analyzer then click Generate Free.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ QUIZ ══ -->
+    <div class="page" id="pg-quiz">
+      <div style="display:flex;flex-direction:column;height:100%">
+        <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <span style="font-size:13px;font-weight:500">❓ Quiz</span>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn-sm accent" onclick="Quiz.generateFromDoc(Analyzer.activeFile)">
+              <i class="bi bi-lightning-charge-fill"></i> Generate Free
+            </button>
+          </div>
+        </div>
+        <div id="quizContent" style="flex:1;overflow-y:auto">
+          <div class="empty-state">
+            <div class="es-icon">❓</div>
+            <p>Select a file in Analyzer then click Generate Free.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ TUTOR ══ -->
+    <div class="page" id="pg-tutor">
+      <div class="tutor-page">
+        <div id="tutorDocBanner" style="display:none;padding:10px 16px;background:var(--accent-bg);border-bottom:1px solid var(--border);align-items:center;gap:10px;flex-shrink:0">
+          <i class="bi bi-book" style="color:var(--accent)"></i>
+          <span style="font-size:13px">Tutoring on: <strong id="tutorDocName"></strong></span>
+          <span class="free-badge ms-auto"><i class="bi bi-stars"></i> Free AI</span>
+        </div>
+        <div id="tutorSuggestions" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);flex-shrink:0"></div>
+        <div class="tutor-msgs" id="tutorMessages">
+          <div class="msg-bubble msg-ai">
+            👋 Hi! I'm your free AI study tutor — powered by Llama 3 & Mistral via OpenRouter. Upload a document and ask me anything!
+          </div>
+        </div>
+        <div class="tutor-input-area">
+          <textarea id="tutorInput" placeholder="Ask anything about your document… (Enter to send)" rows="1"
+            onkeydown="Tutor.keydown(event)"
+            oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+          <button class="az-btn" id="tutorSendBtn" style="width:44px;flex-shrink:0" onclick="Tutor.sendMessage()">
+            <i class="bi bi-send-fill"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PROGRESS ══ -->
+    <div class="page" id="pg-progress">
+      <div class="progress-page" id="progressContent"></div>
+    </div>
+
+  </div><!-- end main-content -->
+
+  <!-- ══ NOTES PANEL ══ -->
+  <aside class="notes-panel" id="notesPanel">
+    <div class="notes-hdr">
+      <div class="notes-hdr-top">
+        <span class="notes-title">Notes</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:11px;color:var(--text4)" id="notesCount"></span>
+          <button class="icon-btn" onclick="Notes.toggle()" title="Close"><i class="bi bi-x"></i></button>
+        </div>
+      </div>
+      <div class="notes-tabs">
+        <button class="notes-tab active" data-tab="list"   onclick="Notes.switchTab('list')">List</button>
+        <button class="notes-tab"        data-tab="editor" onclick="Notes._editId?Notes.switchTab('editor'):Notes.newNote()">Editor</button>
+        <button class="notes-tab"        data-tab="graph"  onclick="Notes.switchTab('graph')">Graph</button>
+      </div>
+      <input type="text" class="notes-search" placeholder="Search notes…" oninput="Notes.search(this.value)">
+    </div>
+    <div class="notes-body" id="notesBody"></div>
+  </aside>
+
+</div><!-- end app-body -->
+
+<!-- Overlays -->
+<div class="ctx-menu" id="ctxMenu"></div>
+<div id="feedbackPopup"></div>
+<div id="modalRoot"></div>
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+<div class="toast-container" id="toastRoot"></div>
+
+<!-- Bootstrap 5 JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- App scripts -->
+<script src="js/data.js"></script>
+<script src="js/notes.js"></script>
+<script src="js/analyzer.js"></script>
+<script src="js/modules.js"></script>
+<script src="js/app.js"></script>
+
+<script>
+// ── Resizer ──
+(function(){
+  const resizer=document.getElementById('resizer'),left=document.getElementById('azLeft');
+  if(!resizer||!left)return;
+  let drag=false,startX=0,startW=0;
+  resizer.addEventListener('mousedown',e=>{drag=true;startX=e.clientX;startW=left.offsetWidth;resizer.classList.add('dragging');document.body.style.userSelect='none';});
+  document.addEventListener('mousemove',e=>{if(!drag)return;left.style.width=Math.max(240,Math.min(480,startW+e.clientX-startX))+'px';});
+  document.addEventListener('mouseup',()=>{drag=false;resizer.classList.remove('dragging');document.body.style.userSelect='';});
+})();
+
+// ── XP animation ──
+const _origAddXP = DB.addXP.bind(DB);
+DB.addXP = function(amount) {
+  _origAddXP(amount);
+  const chip = document.getElementById('xpChip');
+  if(chip){chip.classList.remove('pulse');void chip.offsetWidth;chip.classList.add('pulse');}
+};
+
+// ── Boot ──
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
