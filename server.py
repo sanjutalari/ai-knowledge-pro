@@ -173,7 +173,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 print(f'\n{"="*52}')
 print(f'  StudyAI Pro  ->  http://localhost:{PORT}')
-print(f'  OpenRouter key: {"SET ✓" if OPENROUTER_KEY else "NOT SET ✗"}')
+print(f'  OpenRouter key: {"SET [OK]" if OPENROUTER_KEY else "NOT SET [FAIL]"}')
 print(f'  Fallback model: {FALLBACK_MODEL}')
 print(f'{"="*52}\n')
 

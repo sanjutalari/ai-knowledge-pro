@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pkill -f \"python server.py\")",
+      "Bash(taskkill /f /im python.exe)"
+    ]
+  }
+}
