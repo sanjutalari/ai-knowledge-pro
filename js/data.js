@@ -14,13 +14,13 @@ const DB = {
     jpeg: { label:'IMG',  bg:'#FBEAF0', tc:'#72243E', dot:'#D4537E', ic:'🖼️' },
   },
 
-  // Free models via OpenRouter (verified working)
+  // Free models via OpenRouter (verified working — updated 2026-03-29)
   OR_MODELS: [
-    { id:'google/gemini-2.0-flash-lite-preview-02-05:free', label:'Gemini 2.0 Flash Lite — Fast',   badge:'FREE' },
-    { id:'google/gemma-2-9b-it:free',                  label:'Gemma 2 9B — Google Free',        badge:'FREE' },
+    { id:'meta-llama/llama-3.3-70b-instruct:free',     label:'Llama 3.3 70B — Best Free',       badge:'FREE' },
+    { id:'google/gemma-3-27b-it:free',                  label:'Gemma 3 27B — Google Free',       badge:'FREE' },
     { id:'meta-llama/llama-3.2-3b-instruct:free',      label:'Llama 3.2 3B — Fast Free',        badge:'FREE' },
-    { id:'microsoft/phi-3-mini-128k-instruct:free',    label:'Phi-3 Mini 128K — Long Context',  badge:'FREE' },
-    { id:'qwen/qwen-2.5-7b-instruct:free',             label:'Qwen 2.5 7B — Multilingual',      badge:'FREE' },
+    { id:'qwen/qwen3-coder:free',                       label:'Qwen 3 Coder — Multilingual',     badge:'FREE' },
+    { id:'nvidia/nemotron-nano-9b-v2:free',             label:'Nemotron 9B — NVIDIA Free',       badge:'FREE' },
   ],
 
   DEFAULT_FOLDERS: [
@@ -81,7 +81,7 @@ const DB = {
   files: [], folders: [], sessions: [], flashcards: [], quizzes: [],
   notes: [], undoStack: [],
   stats: { analyses:0, flashcardsReviewed:0, quizzesTaken:0, quizScore:0, streak:0, xp:0, lastActive:null, badges:[] },
-  settings: { theme:'light', lang:'en', sidebarOpen:true, model:'google/gemini-2.0-flash-lite-preview-02-05:free' },
+  settings: { theme:'light', lang:'en', sidebarOpen:true, model:'meta-llama/llama-3.3-70b-instruct:free' },
 
   init() {
     this.files      = JSON.parse(localStorage.getItem('sa_files')      || '[]');
